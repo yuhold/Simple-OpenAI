@@ -19,26 +19,28 @@ export class OpenAIChat extends plugin {
             event: 'message',
             priority: 5000,
             rule: [
-                // 常规带前缀的对话
                 { reg: `^${escPrefix}`, fnc: 'chatWithPrefix' },
-                
-                // 重置和帮助
                 { reg: '^#重置对话$', fnc: 'resetChat' },
                 { reg: `^${escHelpCmd}$`, fnc: 'showHelp' },
                 
-                // 群组管理
+                // 群管理
                 { reg: '^#开启本群AI$', fnc: 'enableGroupChat' },
                 { reg: '^#开启本群ai$', fnc: 'enableGroupChat' },
                 { reg: '^#关闭本群AI$', fnc: 'disableGroupChat' },
                 { reg: '^#关闭本群ai$', fnc: 'disableGroupChat' },
 
-                // [新增] 私聊管理 (Master Only)
+                // 私聊管理 (主人)
                 { reg: '^#开启私聊AI$', fnc: 'enablePrivateChatCmd' },
                 { reg: '^#开启私聊ai$', fnc: 'enablePrivateChatCmd' },
                 { reg: '^#关闭私聊AI$', fnc: 'disablePrivateChatCmd' },
                 { reg: '^#关闭私聊ai$', fnc: 'disablePrivateChatCmd' },
+                
+                // [新增] 黑名单指令 (主人)
+                // 匹配 #拉黑私聊 123456
+                { reg: '^#拉黑私聊(.*)$', fnc: 'blockPrivateChat' },
+                { reg: '^#解禁私聊(.*)$', fnc: 'unblockPrivateChat' },
 
-                // [新增] 免前缀匹配 (匹配所有内容，优先级较低，逻辑中判断是否处理)
+                // 免前缀匹配
                 { reg: '.*', fnc: 'chatWithoutPrefix', log: false }
             ]
         })
@@ -46,7 +48,6 @@ export class OpenAIChat extends plugin {
 
     getChatId(e) { return e.isGroup ? `group:${e.group_id}` : `user:${e.user_id}` }
 
-    // --- 帮助与管理 ---
     async showHelp(e) {
         const config = cfg.getConfig()
         const helpMsg = [
@@ -57,16 +58,41 @@ export class OpenAIChat extends plugin {
             "🔄 重置记忆：#重置对话",
             `🆘 帮助指令：${config.helpCmd}`,
             "",
-            "⚙️ 管理指令：",
-            "   #开启/关闭本群AI (群管)",
-            "   #开启/关闭私聊AI (主人)",
+            "⚙️ 管理指令 (主人)：",
+            "   #开启/关闭私聊AI",
+            "   #拉黑私聊 [QQ号]",
+            "   #解禁私聊 [QQ号]",
             "-----------------------",
             `当前模型：${config.model}`,
         ]
         await e.reply(helpMsg.join("\n"), true)
     }
 
-    // 私聊开关命令 (仅限Master)
+    // --- 黑名单指令 ---
+    async blockPrivateChat(e) {
+        if (!e.isMaster) return
+        // 提取QQ号
+        let targetQQ = e.msg.replace(/^#拉黑私聊/, '').trim()
+        if (!targetQQ) {
+            await e.reply("❌ 请输入要拉黑的QQ号，例如：#拉黑私聊 123456", true)
+            return
+        }
+        cfg.modifyQQBlacklist(targetQQ, true)
+        await e.reply(`🚫 已将用户 ${targetQQ} 加入私聊黑名单。`, true)
+    }
+
+    async unblockPrivateChat(e) {
+        if (!e.isMaster) return
+        let targetQQ = e.msg.replace(/^#解禁私聊/, '').trim()
+        if (!targetQQ) {
+            await e.reply("❌ 请输入要解禁的QQ号，例如：#解禁私聊 123456", true)
+            return
+        }
+        cfg.modifyQQBlacklist(targetQQ, false)
+        await e.reply(`✅ 已将用户 ${targetQQ} 移出私聊黑名单。`, true)
+    }
+    // ----------------
+
     async enablePrivateChatCmd(e) {
         if (!e.isMaster) return
         cfg.setPrivateChatStatus(true)
@@ -108,60 +134,46 @@ export class OpenAIChat extends plugin {
         await e.reply('🗑️ 记忆已清除，开启新话题。')
     }
 
-    // --- 对话入口 1: 带前缀 ---
     async chatWithPrefix(e) {
         const config = cfg.getConfig()
-        // 提取内容 (去掉前缀)
         let prompt = e.msg.replace(new RegExp(`^${config.prefix}`), '').trim()
         await this.processChat(e, prompt)
     }
 
-    // --- 对话入口 2: 免前缀 (私聊专用) ---
     async chatWithoutPrefix(e) {
         const config = cfg.getConfig()
-        
-        // 1. 必须是私聊
         if (e.isGroup) return false 
-
-        // 2. 必须开启了“私聊免前缀”开关
         if (!config.privateChatWithoutPrefix) return false
-
-        // 3. 如果消息是以 # 开头（可能是其他指令），则跳过，不处理
         if (e.msg.startsWith('#') || e.msg.startsWith('/')) return false
-
-        // 4. 调用核心处理逻辑
-        // 注意：这里 e.msg 就是用户想说的话
-        await this.processChat(e, e.msg)
         
-        // 返回 true 表示此消息已被插件处理，不再传递给其他插件（可选，视需求而定）
+        await this.processChat(e, e.msg)
         return true
     }
 
-    // --- 核心处理逻辑 (提取出来复用) ---
+    // --- 核心逻辑 ---
     async processChat(e, prompt) {
         const config = cfg.getConfig()
 
-        // 1. 全局检查：私聊是否被允许
-        if (!e.isGroup && !config.enablePrivateChat) {
-            // 如果私聊关了，直接忽略
+        // 1. 全局私聊开关
+        if (!e.isGroup && !config.enablePrivateChat) return 
+
+        // 2. [新增] 私聊黑名单检测
+        if (!e.isGroup && cfg.isQQBlacklisted(e.user_id)) {
+            // 在黑名单里，直接无视，不返回任何内容
             return 
         }
 
-        // 2. 群聊检查：本群是否被关闭
-        if (e.isGroup && !cfg.isGroupEnabled(e.group_id)) {
-            return 
-        }
+        // 3. 群聊黑名单
+        if (e.isGroup && !cfg.isGroupEnabled(e.group_id)) return 
         
-        // 3. 内容判空
         if (!prompt) return
 
-        // 4. API Key 检查
         if (!config.apiKey) {
             await e.reply('请先在锅巴插件中配置 API Key。')
             return
         }
 
-        // 5. 违禁词检测
+        // 4. 违禁词检测
         if (config.forbiddenWords && Array.isArray(config.forbiddenWords)) {
             const hitWord = config.forbiddenWords.find(word => prompt.includes(word))
             if (hitWord) {
@@ -198,7 +210,6 @@ export class OpenAIChat extends plugin {
                 fetchOptions.agent = new HttpsProxyAgent(config.proxyUrl)
             }
 
-            // 发起请求
             const response = await fetch(config.baseUrl, fetchOptions)
 
             if (!response.ok) {

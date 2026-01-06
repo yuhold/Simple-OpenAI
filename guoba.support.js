@@ -49,26 +49,40 @@ export function supportGuoba() {
                     componentProps: { placeholder: 'https://api.openai.com/v1/chat/completions' }
                 },
                 
-                // --- 私聊设置 (新增) ---
+                // --- 私聊设置 ---
                 {
                     field: 'enablePrivateChat',
                     label: '允许私聊使用AI',
-                    bottomHelpMessage: '关闭后，机器人将不响应私聊的AI对话请求',
+                    bottomHelpMessage: '总开关，关闭后不响应任何私聊',
                     component: 'Switch',
                 },
                 {
                     field: 'privateChatWithoutPrefix',
                     label: '私聊免前缀模式',
-                    // 只有开启了私聊才显示这个选项
                     show: (data) => data.enablePrivateChat === true,
-                    bottomHelpMessage: '开启后，私聊直接发送内容即可对话，无需加前缀（⚠️可能与其他插件冲突，请谨慎开启）',
+                    bottomHelpMessage: '开启后私聊无需加前缀即可对话',
                     component: 'Switch',
+                },
+                // --- 新增：私聊黑名单 ---
+                {
+                    field: 'blacklistedQQList',
+                    label: '私聊黑名单(QQ)',
+                    show: (data) => data.enablePrivateChat === true,
+                    bottomHelpMessage: '输入QQ号并回车。名单内的用户私聊时不予回复。',
+                    component: 'Select',
+                    componentProps: {
+                        mode: 'tags', // 标签模式
+                        allowAdd: true,
+                        open: false,
+                        placeholder: '输入QQ号并回车',
+                        options: []
+                    }
                 },
                 // ---------------------
 
                 {
                     field: 'forbiddenWords',
-                    label: '违禁词列表',
+                    label: '内容违禁词',
                     component: 'Select',
                     componentProps: {
                         mode: 'tags', 
