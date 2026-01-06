@@ -7,7 +7,7 @@ export function supportGuoba() {
         pluginInfo: {
             name: 'Simple-OpenAI',
             title: '简易OpenAI',
-            author: '@YourName',
+            author: '@yuhold',
             authorLink: 'https://github.com/yuhold/',
             link: 'https://github.com/yuhold/Simple-OpenAI/',
             isV3: true,
