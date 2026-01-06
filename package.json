@@ -1,0 +1,11 @@
+{
+  "name": "simple-openai-plugin",
+  "version": "1.2.0",
+  "description": "Yunzai-Bot OpenAI/Gemini Plugin with Proxy Support",
+  "main": "index.js",
+  "type": "module",
+  "author": "YourName",
+  "dependencies": {
+    "https-proxy-agent": "^7.0.0"
+  }
+}
