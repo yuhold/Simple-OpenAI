@@ -22,24 +22,20 @@ export function supportGuoba() {
                     field: 'apiKey',
                     label: 'API Key',
                     bottomHelpMessage: 'sk-开头的密钥',
-                    component: 'Input', // 修复点：改用 Input 组件
+                    component: 'Input', // 修复：改用 Input
                     required: true,
                     componentProps: { 
-                        type: 'password', // 修复点：在这里指定为密码类型
+                        type: 'password', // 修复：指定为密码类型
                         placeholder: 'sk-xxxxxxxx' 
                     }
                 },
-                // --- 代理设置 ---
                 {
                     field: 'proxyUrl',
                     label: 'HTTP代理地址',
-                    bottomHelpMessage: 'Clash默认通常是 http://127.0.0.1:7890，直连请留空',
+                    bottomHelpMessage: '直连请留空，Clash通常填 http://127.0.0.1:7890',
                     component: 'Input',
-                    componentProps: {
-                        placeholder: 'http://127.0.0.1:7890'
-                    }
+                    componentProps: { placeholder: 'http://127.0.0.1:7890' }
                 },
-                // --------------
                 {
                     field: 'useCustomUrl',
                     label: '使用自定义API地址',
@@ -52,34 +48,53 @@ export function supportGuoba() {
                     show: (data) => data.useCustomUrl === true,
                     component: 'Input',
                     required: true,
-                    componentProps: {
-                        placeholder: 'https://api.openai.com/v1/chat/completions'
-                    }
+                    componentProps: { placeholder: 'https://api.openai.com/v1/chat/completions' }
                 },
                 {
                     field: 'model',
                     label: '模型选择',
+                    bottomHelpMessage: '支持自定义：直接在框里输入新模型名称并回车即可',
                     component: 'Select',
                     componentProps: {
+                        // 允许手动添加新选项
+                        allowAdd: true, 
                         options: [
                             { label: 'GPT-3.5 Turbo', value: 'gpt-3.5-turbo' },
                             { label: 'GPT-4', value: 'gpt-4' },
                             { label: 'GPT-4o', value: 'gpt-4o' },
                             { label: 'GPT-4o Mini', value: 'gpt-4o-mini' },
-                            { label: 'Gemini Pro', value: 'gemini-pro' },
                             { label: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro' },
                             { label: 'Gemini 1.5 Flash', value: 'gemini-1.5-flash' },
-                            { label: 'Claude 3.5 Sonnet', value: 'claude-3-5-sonnet-20240620' }
+                            { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' } // 帮你加进去
                         ],
-                        allowAdd: true,
-                        placeholder: '选择或输入模型'
+                        placeholder: '选择或直接输入模型名'
                     }
                 },
+                // --- 新增转发设置 ---
+                {
+                    field: 'enableForwardMsg',
+                    label: '长消息转合并转发',
+                    bottomHelpMessage: '回复内容过长时，以合并转发（聊天记录）形式发送，避免刷屏',
+                    component: 'Switch',
+                },
+                {
+                    field: 'forwardMsgLimit',
+                    label: '触发长度阈值',
+                    show: (data) => data.enableForwardMsg === true,
+                    component: 'InputNumber',
+                    componentProps: { 
+                        min: 10, 
+                        max: 5000, 
+                        placeholder: '300' 
+                    },
+                    bottomHelpMessage: '回复超过多少个字符时触发合并转发'
+                },
+                // ------------------
                 {
                     field: 'historyCount',
                     label: '记忆轮数',
                     component: 'InputNumber',
-                    componentProps: { min: 0, max: 50, placeholder: '10' }
+                    componentProps: { min: 0, max: 50 }
                 },
                 {
                     field: 'prefix',

@@ -9,11 +9,14 @@ const defaultConfig = {
     apiKey: '',
     useCustomUrl: false,
     baseUrl: 'https://api.openai.com/v1/chat/completions',
-    proxyUrl: '', // 新增：代理地址
+    proxyUrl: '', 
     model: 'gpt-3.5-turbo',
     prefix: '#chat',
     historyCount: 10,
-    systemPrompt: '你是一个乐于助人的AI助手。'
+    systemPrompt: '你是一个乐于助人的AI助手。',
+    // --- 新增配置 ---
+    enableForwardMsg: false, // 是否开启长消息转合并转发
+    forwardMsgLimit: 300     // 超过多少字触发转发
 }
 
 let config = {}
@@ -41,7 +44,6 @@ export default class Config {
 
     getConfig() {
         const cfg = { ...config }
-        // 如果未开启自定义URL，强制返回官方地址
         if (!cfg.useCustomUrl) {
             cfg.baseUrl = 'https://api.openai.com/v1/chat/completions'
         }

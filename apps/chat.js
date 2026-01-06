@@ -1,6 +1,7 @@
 import plugin from '../../../lib/plugins/plugin.js'
 import fetch from 'node-fetch'
-import { HttpsProxyAgent } from 'https-proxy-agent' // 引入代理模块
+import { HttpsProxyAgent } from 'https-proxy-agent'
+import common from '../../../lib/common/common.js' // 引入通用工具制作转发消息
 import Config from '../model/config.js'
 
 const cfg = new Config()
@@ -13,7 +14,7 @@ export class OpenAIChat extends plugin {
 
         super({
             name: 'Simple-OpenAI',
-            dsc: 'OpenAI对话插件(支持代理)',
+            dsc: 'OpenAI对话插件(支持代理/长消息转发)',
             event: 'message',
             priority: 5000,
             rule: [
@@ -49,7 +50,6 @@ export class OpenAIChat extends plugin {
         if (history.length > maxHistory) history = history.slice(-maxHistory)
 
         try {
-            // --- 代理配置核心逻辑 ---
             let fetchOptions = {
                 method: 'POST',
                 headers: {
@@ -66,23 +66,21 @@ export class OpenAIChat extends plugin {
                 })
             }
 
-            // 如果配置了代理地址，注入 agent
             if (config.proxyUrl) {
                 fetchOptions.agent = new HttpsProxyAgent(config.proxyUrl)
             }
-            // ---------------------
+
+            // 提示思考中 (可选)
+            // await e.reply('Thinking...', true)
 
             const response = await fetch(config.baseUrl, fetchOptions)
 
             if (!response.ok) {
                 const errText = await response.text()
                 console.error(`[OpenAI Error] ${response.status}: ${errText}`)
-                
-                // 出错回滚
                 history.pop()
                 historyMap.set(chatId, history)
-                
-                await e.reply(`请求失败: ${response.status}\n请检查API Key或网络连接(代理)。`)
+                await e.reply(`请求失败: ${response.status}\n请检查API Key、代理或模型名称。`)
                 return
             }
 
@@ -92,7 +90,16 @@ export class OpenAIChat extends plugin {
                 const replyContent = data.choices[0].message.content.trim()
                 history.push({ role: "assistant", content: replyContent })
                 historyMap.set(chatId, history)
-                await e.reply(replyContent, true)
+
+                // --- 核心逻辑：判断是否需要合并转发 ---
+                if (config.enableForwardMsg && replyContent.length > (config.forwardMsgLimit || 300)) {
+                    // 制作合并转发消息
+                    await this.replyForward(e, replyContent, config.model)
+                } else {
+                    // 普通发送
+                    await e.reply(replyContent, true)
+                }
+                // -----------------------------------
             } else {
                 history.pop()
                 historyMap.set(chatId, history)
@@ -103,12 +110,20 @@ export class OpenAIChat extends plugin {
             console.error('[OpenAI Plugin Error]', error)
             history.pop()
             historyMap.set(chatId, history)
-
             if (error.code === 'ETIMEDOUT' || error.type === 'system') {
-                await e.reply('连接超时！请检查是否填写了正确的 HTTP 代理地址。')
+                await e.reply('连接超时！请检查HTTP代理设置。')
             } else {
                 await e.reply(`发生错误: ${error.message}`)
             }
         }
+    }
+
+    // 封装合并转发函数
+    async replyForward(e, content, modelName) {
+        let msg = [content]
+        // 使用 common.makeForwardMsg 制作转发卡片
+        // 标题显示模型名称
+        let forwardMsg = await common.makeForwardMsg(e, msg, `AI回复 (${modelName})`)
+        await e.reply(forwardMsg)
     }
 }
