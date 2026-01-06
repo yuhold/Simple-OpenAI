@@ -1,7 +1,7 @@
 import plugin from '../../../lib/plugins/plugin.js'
 import fetch from 'node-fetch'
 import { HttpsProxyAgent } from 'https-proxy-agent'
-import common from '../../../lib/common/common.js' // 引入通用工具制作转发消息
+import common from '../../../lib/common/common.js'
 import Config from '../model/config.js'
 
 const cfg = new Config()
@@ -10,22 +10,82 @@ const historyMap = new Map()
 export class OpenAIChat extends plugin {
     constructor() {
         const config = cfg.getConfig()
+        
+        // 处理正则转义
         const escPrefix = config.prefix.replace(/([.*+?^=!:${}()|[\]/\\])/g, "\\$1")
+        const escHelpCmd = (config.helpCmd || '#chat帮助').replace(/([.*+?^=!:${}()|[\]/\\])/g, "\\$1")
 
         super({
             name: 'Simple-OpenAI',
-            dsc: 'OpenAI对话插件(支持代理/长消息转发)',
+            dsc: 'OpenAI对话插件',
             event: 'message',
             priority: 5000,
             rule: [
                 { reg: `^${escPrefix}`, fnc: 'chat' },
-                { reg: '^#重置对话$', fnc: 'resetChat' }
+                { reg: '^#重置对话$', fnc: 'resetChat' },
+                
+                // 新增：帮助命令
+                { reg: `^${escHelpCmd}$`, fnc: 'showHelp' },
+                
+                // 新增：开关命令 (完全匹配)
+                { reg: '^#开启本群AI$', fnc: 'enableGroupChat' },
+                { reg: '^#开启本群ai$', fnc: 'enableGroupChat' }, // 兼容小写
+                { reg: '^#关闭本群AI$', fnc: 'disableGroupChat' },
+                { reg: '^#关闭本群ai$', fnc: 'disableGroupChat' }  // 兼容小写
             ]
         })
     }
 
     getChatId(e) { return e.isGroup ? `group:${e.group_id}` : `user:${e.user_id}` }
 
+    // --- 1. 帮助菜单 ---
+    async showHelp(e) {
+        const config = cfg.getConfig()
+        const helpMsg = [
+            "🤖 Simple-OpenAI 帮助菜单",
+            "-----------------------",
+            `💬 对话指令：${config.prefix} [内容]`,
+            "   示例：#chat 讲个笑话",
+            "",
+            "🔄 重置记忆：#重置对话",
+            "   清空当前对话历史，开启新话题",
+            "",
+            "⚙️ 管理指令 (仅管理员)：",
+            "   #开启本群AI / #关闭本群AI",
+            "-----------------------",
+            `当前模型：${config.model}`,
+            `记忆轮数：${config.historyCount}`
+        ]
+        await e.reply(helpMsg.join("\n"), true)
+    }
+
+    // --- 2. 开启/关闭逻辑 ---
+    async enableGroupChat(e) {
+        if (!this.checkPermission(e)) return
+        cfg.setGroupStatus(e.group_id, true)
+        await e.reply("✅ 本群AI对话已开启。", true)
+    }
+
+    async disableGroupChat(e) {
+        if (!this.checkPermission(e)) return
+        cfg.setGroupStatus(e.group_id, false)
+        await e.reply("🚫 本群AI对话已关闭。", true)
+    }
+
+    // 检查权限 (Master, 群主, 管理员)
+    checkPermission(e) {
+        if (!e.isGroup) {
+            e.reply("❌ 此命令仅限群聊使用。")
+            return false
+        }
+        if (e.isMaster || e.member.is_owner || e.member.is_admin) {
+            return true
+        }
+        e.reply("❌ 只有群主或管理员可以操作。")
+        return false
+    }
+
+    // --- 3. 对话逻辑 ---
     async resetChat(e) {
         historyMap.delete(this.getChatId(e))
         await e.reply('🗑️ 记忆已清除，开启新话题。')
@@ -33,6 +93,12 @@ export class OpenAIChat extends plugin {
 
     async chat(e) {
         const config = cfg.getConfig()
+
+        // [新增] 检查本群是否被关闭
+        if (e.isGroup && !cfg.isGroupEnabled(e.group_id)) {
+            // 如果被关闭，直接返回，不回复任何内容
+            return false 
+        }
         
         if (!config.apiKey) {
             await e.reply('请先在锅巴插件中配置 API Key。')
@@ -70,9 +136,6 @@ export class OpenAIChat extends plugin {
                 fetchOptions.agent = new HttpsProxyAgent(config.proxyUrl)
             }
 
-            // 提示思考中 (可选)
-            // await e.reply('Thinking...', true)
-
             const response = await fetch(config.baseUrl, fetchOptions)
 
             if (!response.ok) {
@@ -91,15 +154,11 @@ export class OpenAIChat extends plugin {
                 history.push({ role: "assistant", content: replyContent })
                 historyMap.set(chatId, history)
 
-                // --- 核心逻辑：判断是否需要合并转发 ---
                 if (config.enableForwardMsg && replyContent.length > (config.forwardMsgLimit || 300)) {
-                    // 制作合并转发消息
                     await this.replyForward(e, replyContent, config.model)
                 } else {
-                    // 普通发送
                     await e.reply(replyContent, true)
                 }
-                // -----------------------------------
             } else {
                 history.pop()
                 historyMap.set(chatId, history)
@@ -118,11 +177,8 @@ export class OpenAIChat extends plugin {
         }
     }
 
-    // 封装合并转发函数
     async replyForward(e, content, modelName) {
         let msg = [content]
-        // 使用 common.makeForwardMsg 制作转发卡片
-        // 标题显示模型名称
         let forwardMsg = await common.makeForwardMsg(e, msg, `AI回复 (${modelName})`)
         await e.reply(forwardMsg)
     }
