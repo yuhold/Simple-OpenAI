@@ -22,10 +22,10 @@ export function supportGuoba() {
                     field: 'apiKey',
                     label: 'API Key',
                     bottomHelpMessage: 'sk-开头的密钥',
-                    component: 'Input', // 修复：改用 Input
+                    component: 'Input',
                     required: true,
                     componentProps: { 
-                        type: 'password', // 修复：指定为密码类型
+                        type: 'password', 
                         placeholder: 'sk-xxxxxxxx' 
                     }
                 },
@@ -50,14 +50,21 @@ export function supportGuoba() {
                     required: true,
                     componentProps: { placeholder: 'https://api.openai.com/v1/chat/completions' }
                 },
+                
+                // --- 模型设置 ---
+                {
+                    field: 'enableCustomModel',
+                    label: '使用自定义模型名',
+                    bottomHelpMessage: '开启后可手动输入模型名称，关闭则使用预设列表',
+                    component: 'Switch',
+                },
                 {
                     field: 'model',
-                    label: '模型选择',
-                    bottomHelpMessage: '支持自定义：直接在框里输入新模型名称并回车即可',
+                    label: '预设模型选择',
+                    show: (data) => data.enableCustomModel === false,
                     component: 'Select',
                     componentProps: {
-                        // 允许手动添加新选项
-                        allowAdd: true, 
+                        allowAdd: false,
                         options: [
                             { label: 'GPT-3.5 Turbo', value: 'gpt-3.5-turbo' },
                             { label: 'GPT-4', value: 'gpt-4' },
@@ -65,42 +72,43 @@ export function supportGuoba() {
                             { label: 'GPT-4o Mini', value: 'gpt-4o-mini' },
                             { label: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro' },
                             { label: 'Gemini 1.5 Flash', value: 'gemini-1.5-flash' },
-                            { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' } // 帮你加进去
+                            { label: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' }
                         ],
-                        placeholder: '选择或直接输入模型名'
+                        placeholder: '请选择预设模型'
                     }
                 },
-                // --- 新增转发设置 ---
                 {
-                    field: 'enableForwardMsg',
-                    label: '长消息转合并转发',
-                    bottomHelpMessage: '回复内容过长时，以合并转发（聊天记录）形式发送，避免刷屏',
-                    component: 'Switch',
+                    field: 'customModelName',
+                    label: '自定义模型名称',
+                    show: (data) => data.enableCustomModel === true,
+                    component: 'Input',
+                    required: true,
+                    componentProps: {
+                        placeholder: '输入模型名称...'
+                    }
                 },
+                
+                // --- 触发设置 ---
                 {
-                    field: 'forwardMsgLimit',
-                    label: '触发长度阈值',
-                    show: (data) => data.enableForwardMsg === true,
-                    component: 'InputNumber',
-                    componentProps: { 
-                        min: 10, 
-                        max: 5000, 
-                        placeholder: '300' 
-                    },
-                    bottomHelpMessage: '回复超过多少个字符时触发合并转发'
+                    field: 'prefix',
+                    label: '对话触发前缀',
+                    component: 'Input',
+                    componentProps: { placeholder: '#chat' }
                 },
-                // ------------------
+                // 新增：帮助命令设置
+                {
+                    field: 'helpCmd',
+                    label: '帮助菜单命令',
+                    bottomHelpMessage: '自定义呼出帮助菜单的命令，修改后需重启',
+                    component: 'Input',
+                    componentProps: { placeholder: '#chat帮助' }
+                },
+
                 {
                     field: 'historyCount',
                     label: '记忆轮数',
                     component: 'InputNumber',
                     componentProps: { min: 0, max: 50 }
-                },
-                {
-                    field: 'prefix',
-                    label: '触发前缀',
-                    component: 'Input',
-                    componentProps: { placeholder: '#chat' }
                 },
                 {
                     field: 'systemPrompt',
@@ -110,6 +118,18 @@ export function supportGuoba() {
                         type: 'textarea',
                         autoSize: { minRows: 2, maxRows: 5 }
                     }
+                },
+                {
+                    field: 'enableForwardMsg',
+                    label: '长消息转合并转发',
+                    component: 'Switch',
+                },
+                {
+                    field: 'forwardMsgLimit',
+                    label: '触发长度阈值',
+                    show: (data) => data.enableForwardMsg === true,
+                    component: 'InputNumber',
+                    componentProps: { min: 10, max: 5000, placeholder: '300' }
                 }
             ],
             getConfigData() { return _Config.getConfig() },
