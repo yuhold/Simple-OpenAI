@@ -4,7 +4,7 @@
   "description": "Yunzai-Bot OpenAI/Gemini Plugin with Proxy Support",
   "main": "index.js",
   "type": "module",
-  "author": "YourName",
+  "author": "yuhold",
   "dependencies": {
     "https-proxy-agent": "^7.0.0"
   }
