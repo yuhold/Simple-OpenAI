@@ -10,8 +10,6 @@ const historyMap = new Map()
 export class OpenAIChat extends plugin {
     constructor() {
         const config = cfg.getConfig()
-        
-        // 处理正则转义
         const escPrefix = config.prefix.replace(/([.*+?^=!:${}()|[\]/\\])/g, "\\$1")
         const escHelpCmd = (config.helpCmd || '#chat帮助').replace(/([.*+?^=!:${}()|[\]/\\])/g, "\\$1")
 
@@ -23,43 +21,34 @@ export class OpenAIChat extends plugin {
             rule: [
                 { reg: `^${escPrefix}`, fnc: 'chat' },
                 { reg: '^#重置对话$', fnc: 'resetChat' },
-                
-                // 新增：帮助命令
                 { reg: `^${escHelpCmd}$`, fnc: 'showHelp' },
-                
-                // 新增：开关命令 (完全匹配)
                 { reg: '^#开启本群AI$', fnc: 'enableGroupChat' },
-                { reg: '^#开启本群ai$', fnc: 'enableGroupChat' }, // 兼容小写
+                { reg: '^#开启本群ai$', fnc: 'enableGroupChat' },
                 { reg: '^#关闭本群AI$', fnc: 'disableGroupChat' },
-                { reg: '^#关闭本群ai$', fnc: 'disableGroupChat' }  // 兼容小写
+                { reg: '^#关闭本群ai$', fnc: 'disableGroupChat' }
             ]
         })
     }
 
     getChatId(e) { return e.isGroup ? `group:${e.group_id}` : `user:${e.user_id}` }
 
-    // --- 1. 帮助菜单 ---
     async showHelp(e) {
         const config = cfg.getConfig()
         const helpMsg = [
             "🤖 Simple-OpenAI 帮助菜单",
             "-----------------------",
             `💬 对话指令：${config.prefix} [内容]`,
-            "   示例：#chat 讲个笑话",
-            "",
             "🔄 重置记忆：#重置对话",
-            "   清空当前对话历史，开启新话题",
+            `🆘 帮助指令：${config.helpCmd}`,
             "",
             "⚙️ 管理指令 (仅管理员)：",
             "   #开启本群AI / #关闭本群AI",
             "-----------------------",
             `当前模型：${config.model}`,
-            `记忆轮数：${config.historyCount}`
         ]
         await e.reply(helpMsg.join("\n"), true)
     }
 
-    // --- 2. 开启/关闭逻辑 ---
     async enableGroupChat(e) {
         if (!this.checkPermission(e)) return
         cfg.setGroupStatus(e.group_id, true)
@@ -72,7 +61,6 @@ export class OpenAIChat extends plugin {
         await e.reply("🚫 本群AI对话已关闭。", true)
     }
 
-    // 检查权限 (Master, 群主, 管理员)
     checkPermission(e) {
         if (!e.isGroup) {
             e.reply("❌ 此命令仅限群聊使用。")
@@ -85,7 +73,6 @@ export class OpenAIChat extends plugin {
         return false
     }
 
-    // --- 3. 对话逻辑 ---
     async resetChat(e) {
         historyMap.delete(this.getChatId(e))
         await e.reply('🗑️ 记忆已清除，开启新话题。')
@@ -94,9 +81,8 @@ export class OpenAIChat extends plugin {
     async chat(e) {
         const config = cfg.getConfig()
 
-        // [新增] 检查本群是否被关闭
+        // 1. 检查群组开关
         if (e.isGroup && !cfg.isGroupEnabled(e.group_id)) {
-            // 如果被关闭，直接返回，不回复任何内容
             return false 
         }
         
@@ -107,6 +93,18 @@ export class OpenAIChat extends plugin {
 
         let prompt = e.msg.replace(new RegExp(`^${config.prefix}`), '').trim()
         if (!prompt) return
+
+        // 2. --- [新增] 违禁词检测 ---
+        if (config.forbiddenWords && Array.isArray(config.forbiddenWords)) {
+            // 遍历违禁词列表
+            const hitWord = config.forbiddenWords.find(word => prompt.includes(word))
+            if (hitWord) {
+                // 如果包含违禁词，拒绝处理
+                await e.reply(`⚠️ 您的消息包含敏感词 "${hitWord}"，拒绝处理。`, true)
+                return // 直接结束，不发请求
+            }
+        }
+        // --------------------------
 
         const chatId = this.getChatId(e)
         let history = historyMap.get(chatId) || []
@@ -143,7 +141,7 @@ export class OpenAIChat extends plugin {
                 console.error(`[OpenAI Error] ${response.status}: ${errText}`)
                 history.pop()
                 historyMap.set(chatId, history)
-                await e.reply(`请求失败: ${response.status}\n请检查API Key、代理或模型名称。`)
+                await e.reply(`请求失败: ${response.status}\n请检查API Key或网络。`)
                 return
             }
 

@@ -32,14 +32,12 @@ export function supportGuoba() {
                 {
                     field: 'proxyUrl',
                     label: 'HTTP代理地址',
-                    bottomHelpMessage: '直连请留空，Clash通常填 http://127.0.0.1:7890',
                     component: 'Input',
                     componentProps: { placeholder: 'http://127.0.0.1:7890' }
                 },
                 {
                     field: 'useCustomUrl',
                     label: '使用自定义API地址',
-                    bottomHelpMessage: '国内中转请开启此项，官方直连请关闭',
                     component: 'Switch',
                 },
                 {
@@ -51,11 +49,25 @@ export function supportGuoba() {
                     componentProps: { placeholder: 'https://api.openai.com/v1/chat/completions' }
                 },
                 
-                // --- 模型设置 ---
+                // --- 违禁词设置 (新增) ---
+                {
+                    field: 'forbiddenWords',
+                    label: '违禁词列表',
+                    bottomHelpMessage: '输入违禁词后按【回车】添加。包含这些词的消息将被拦截。',
+                    component: 'Select',
+                    componentProps: {
+                        mode: 'tags', // 标签模式
+                        allowAdd: true, // 允许手动输入
+                        open: false, // 不自动弹出下拉框
+                        placeholder: '输入词汇并回车',
+                        options: [] // 不需要预设选项
+                    }
+                },
+                // -----------------------
+
                 {
                     field: 'enableCustomModel',
                     label: '使用自定义模型名',
-                    bottomHelpMessage: '开启后可手动输入模型名称，关闭则使用预设列表',
                     component: 'Switch',
                 },
                 {
@@ -83,27 +95,20 @@ export function supportGuoba() {
                     show: (data) => data.enableCustomModel === true,
                     component: 'Input',
                     required: true,
-                    componentProps: {
-                        placeholder: '输入模型名称...'
-                    }
+                    componentProps: { placeholder: '输入模型名称...' }
                 },
-                
-                // --- 触发设置 ---
                 {
                     field: 'prefix',
                     label: '对话触发前缀',
                     component: 'Input',
                     componentProps: { placeholder: '#chat' }
                 },
-                // 新增：帮助命令设置
                 {
                     field: 'helpCmd',
                     label: '帮助菜单命令',
-                    bottomHelpMessage: '自定义呼出帮助菜单的命令，修改后需重启',
                     component: 'Input',
                     componentProps: { placeholder: '#chat帮助' }
                 },
-
                 {
                     field: 'historyCount',
                     label: '记忆轮数',
