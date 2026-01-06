@@ -22,9 +22,12 @@ export function supportGuoba() {
                     field: 'apiKey',
                     label: 'API Key',
                     bottomHelpMessage: 'sk-开头的密钥',
-                    component: 'Password',
+                    component: 'Input', // 修复点：改用 Input 组件
                     required: true,
-                    componentProps: { placeholder: 'sk-xxxxxxxx' }
+                    componentProps: { 
+                        type: 'password', // 修复点：在这里指定为密码类型
+                        placeholder: 'sk-xxxxxxxx' 
+                    }
                 },
                 // --- 代理设置 ---
                 {
@@ -65,7 +68,8 @@ export function supportGuoba() {
                             { label: 'GPT-4o Mini', value: 'gpt-4o-mini' },
                             { label: 'Gemini Pro', value: 'gemini-pro' },
                             { label: 'Gemini 1.5 Pro', value: 'gemini-1.5-pro' },
-                            { label: 'Gemini 1.5 Flash', value: 'gemini-1.5-flash' }
+                            { label: 'Gemini 1.5 Flash', value: 'gemini-1.5-flash' },
+                            { label: 'Claude 3.5 Sonnet', value: 'claude-3-5-sonnet-20240620' }
                         ],
                         allowAdd: true,
                         placeholder: '选择或输入模型'
