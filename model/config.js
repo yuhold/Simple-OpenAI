@@ -24,10 +24,12 @@ const defaultConfig = {
     forwardMsgLimit: 300,
     
     closedGroupList: [],
-    
-    // --- 新增：违禁词列表 ---
-    forbiddenWords: [] 
-    // ----------------------
+    forbiddenWords: [],
+
+    // --- 新增：私聊相关配置 ---
+    enablePrivateChat: true,       // 是否允许私聊使用AI
+    privateChatWithoutPrefix: false // 私聊是否无需前缀
+    // -------------------------
 }
 
 let config = {}
@@ -81,6 +83,12 @@ export default class Config {
             if (index === -1) list.push(groupId)
         }
         config.closedGroupList = list
+        this.saveConfig(config)
+    }
+
+    // --- 新增：设置私聊状态 ---
+    setPrivateChatStatus(isEnable) {
+        config.enablePrivateChat = isEnable
         this.saveConfig(config)
     }
 
