@@ -24,17 +24,19 @@ const defaultConfig = {
     enableForwardMsg: false, 
     forwardMsgLimit: 300,
     
+    // --- 新增：去除Markdown格式 ---
+    stripMarkdown: true, // 默认开启，让回复更干净
+    // ----------------------------
+
     closedGroupList: [],
     forbiddenWords: [],
 
     enablePrivateChat: true,
     privateChatWithoutPrefix: false,
 
-    // --- 新增：名单模式设置 ---
-    whiteListMode: false, // false=黑名单模式(默认), true=白名单模式
+    whiteListMode: false,
     blacklistedQQList: [], 
     whitelistedQQList: [] 
-    // -----------------------
 }
 
 let config = {}
@@ -92,19 +94,16 @@ export default class Config {
         this.saveConfig(config)
     }
 
-    // --- 名单操作 ---
     setWhiteListMode(isEnable) {
         config.whiteListMode = isEnable
         this.saveConfig(config)
     }
 
-    // 黑名单检查
     isQQBlacklisted(userId) {
         const list = config.blacklistedQQList || []
         return list.includes(String(userId))
     }
 
-    // 白名单检查
     isQQWhitelisted(userId) {
         const list = config.whitelistedQQList || []
         return list.includes(String(userId))

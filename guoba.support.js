@@ -21,9 +21,16 @@ export function supportGuoba() {
                 {
                     field: 'debugMode',
                     label: '调试模式',
-                    bottomHelpMessage: '开启后输出详细日志',
                     component: 'Switch',
                 },
+                // --- 新增：Markdown 清洗开关 ---
+                {
+                    field: 'stripMarkdown',
+                    label: '去除Markdown格式',
+                    bottomHelpMessage: '开启后将去除 **加粗**、# 标题 等符号，使文本显示更干净',
+                    component: 'Switch',
+                },
+                // -----------------------------
                 {
                     field: 'apiKey',
                     label: 'API Key',
@@ -55,7 +62,6 @@ export function supportGuoba() {
                     componentProps: { placeholder: 'https://api.openai.com/v1/chat/completions' }
                 },
                 
-                // --- 私聊及名单设置 ---
                 {
                     field: 'enablePrivateChat',
                     label: '允许私聊使用AI',
@@ -69,7 +75,6 @@ export function supportGuoba() {
                     component: 'Switch',
                 },
                 
-                // 模式切换
                 {
                     field: 'whiteListMode',
                     label: '私聊白名单模式',
@@ -78,13 +83,10 @@ export function supportGuoba() {
                     component: 'Switch',
                 },
 
-                // 黑名单输入框 (仅在 模式=关闭 时显示)
                 {
                     field: 'blacklistedQQList',
                     label: '私聊黑名单(QQ)',
-                    // 显示条件：私聊开启 且 白名单模式关闭
                     show: (data) => data.enablePrivateChat === true && data.whiteListMode === false,
-                    bottomHelpMessage: '名单内的用户私聊时不予回复',
                     component: 'Select',
                     componentProps: {
                         mode: 'tags', 
@@ -95,13 +97,10 @@ export function supportGuoba() {
                     }
                 },
 
-                // 白名单输入框 (仅在 模式=开启 时显示)
                 {
                     field: 'whitelistedQQList',
                     label: '私聊白名单(QQ)',
-                    // 显示条件：私聊开启 且 白名单模式开启
                     show: (data) => data.enablePrivateChat === true && data.whiteListMode === true,
-                    bottomHelpMessage: '只有名单内的用户私聊才会回复',
                     component: 'Select',
                     componentProps: {
                         mode: 'tags', 
@@ -111,7 +110,6 @@ export function supportGuoba() {
                         options: []
                     }
                 },
-                // ---------------------
 
                 {
                     field: 'forbiddenWords',
@@ -126,7 +124,6 @@ export function supportGuoba() {
                     }
                 },
                 
-                // 模型和其他配置
                 {
                     field: 'enableCustomModel',
                     label: '使用自定义模型名',
