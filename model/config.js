@@ -12,6 +12,7 @@ const defaultConfig = {
     proxyUrl: '', 
     model: 'gpt-3.5-turbo',
     debugMode: false,
+    stripMarkdown: true, // 去除Markdown格式
 
     enableCustomModel: false,
     customModelName: '',
@@ -24,10 +25,6 @@ const defaultConfig = {
     enableForwardMsg: false, 
     forwardMsgLimit: 300,
     
-    // --- 新增：去除Markdown格式 ---
-    stripMarkdown: true, // 默认开启，让回复更干净
-    // ----------------------------
-
     closedGroupList: [],
     forbiddenWords: [],
 
@@ -58,12 +55,15 @@ export default class Config {
                 console.error('[Simple-OpenAI] 配置文件读取失败', e)
             }
         }
+        // 强制合并默认配置，确保新字段存在
         config = _.defaultsDeep(config, defaultConfig)
         this.saveConfig(config)
     }
 
     getConfig() {
-        const cfg = { ...config }
+        // 再次合并防止运行时缺失
+        const cfg = _.defaultsDeep({ ...config }, defaultConfig)
+        
         if (!cfg.useCustomUrl) {
             cfg.baseUrl = 'https://api.openai.com/v1/chat/completions'
         }
@@ -73,8 +73,12 @@ export default class Config {
         return cfg
     }
 
+    // --- 修复点：添加 || [] 防止报错 ---
+
     isGroupEnabled(groupId) {
-        return !config.closedGroupList.includes(groupId)
+        // 如果 config.closedGroupList 是 undefined，就用 [] 代替
+        const list = config.closedGroupList || [] 
+        return !list.includes(groupId)
     }
 
     setGroupStatus(groupId, isEnable) {
