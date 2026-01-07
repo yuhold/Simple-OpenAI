@@ -14,13 +14,14 @@ const defaultConfig = {
     debugMode: false,
     stripMarkdown: true,
 
-    // --- 新增：顺序处理与速率限制 ---
-    enableSequential: true,   // 是否开启顺序处理 (排队模式)
-    
-    enableRateLimit: false,   // 是否开启速率限制
-    rateLimitWindow: 60,      // 限制窗口时间 (分钟)
-    rateLimitCount: 10,       // 在窗口时间内允许的次数
-    // ----------------------------
+    // --- 新增：语言设置 ---
+    language: 'zh', // 'zh'=中文, 'en'=English
+    // --------------------
+
+    enableSequential: true,   
+    enableRateLimit: false,   
+    rateLimitWindow: 60,      
+    rateLimitCount: 10,       
 
     enableCustomModel: false,
     customModelName: '',
@@ -68,7 +69,6 @@ export default class Config {
     }
 
     getConfig() {
-        // 确保深拷贝且合并默认值，防止缺少字段报错
         const cfg = _.defaultsDeep({ ...config }, defaultConfig)
         
         if (!cfg.useCustomUrl) {
@@ -81,7 +81,7 @@ export default class Config {
     }
 
     isGroupEnabled(groupId) {
-        const list = config.closedGroupList || []
+        const list = config.closedGroupList || [] 
         return !list.includes(groupId)
     }
 
