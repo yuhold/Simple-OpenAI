@@ -7,6 +7,14 @@ import Config from '../model/config.js'
 const cfg = new Config()
 const historyMap = new Map()
 
+// --- 全局变量 ---
+// 1. 消息队列: Map<chatId, Array<{e, prompt, mode}>>
+const chatQueue = new Map()
+// 2. 正在处理标志: Map<chatId, boolean>
+const isProcessing = new Map()
+// 3. 速率限制记录: Map<userId, Array<timestamp>>
+const rateLimitMap = new Map()
+
 export class OpenAIChat extends plugin {
     constructor() {
         const config = cfg.getConfig()
@@ -53,71 +61,136 @@ export class OpenAIChat extends plugin {
         if (config.debugMode) logger.mark(`[Simple-OpenAI] ${msg}`)
     }
 
-    // --- 新增：Markdown 清洗工具函数 ---
     cleanMarkdown(text) {
         if (!text) return text;
         return text
-            // 去除加粗 **text**
             .replace(/\*\*(.*?)\*\*/g, '$1')
-            // 去除斜体 *text*
             .replace(/\*(.*?)\*/g, '$1')
-            // 去除代码块符号 ``` (保留内容)
             .replace(/```[\s\S]*?\n/g, '') 
             .replace(/```/g, '')
-            // 去除行内代码 `text`
             .replace(/`(.*?)`/g, '$1')
-            // 将列表符号 * 或 - 替换为圆点 •
             .replace(/^\s*[\-\*]\s/gm, '• ')
-            // 去除标题 #
             .replace(/^#+\s/gm, '')
-            // 去除链接格式 [text](url) -> text
             .replace(/\[(.*?)\]\(.*?\)/g, '$1')
-            // 去除图片格式 ![text](url) -> [图片]
             .replace(/!\[(.*?)\]\(.*?\)/g, '[图片]');
     }
-    // ----------------------------------
 
+    // --- 入口函数修改：不再直接调用 processChat，而是去 handleChatRequest ---
     async chatWithoutPrefix(e) {
         const config = cfg.getConfig()
         if (e.isGroup) return false 
         if (!config.privateChatWithoutPrefix) return false
         if (e.msg.startsWith('#') || e.msg.startsWith('/')) return false
         
-        this.log(`免前缀模式捕获私聊消息: ${e.msg}`)
-        const handled = await this.processChat(e, e.msg, 'NoPrefixMode')
-        return handled
+        this.log(`免前缀模式捕获: ${e.msg}`)
+        // 调用请求处理器
+        await this.handleChatRequest(e, e.msg, 'NoPrefixMode')
+        return true // 返回 true 告诉云崽这里处理了
     }
 
     async chatWithPrefix(e) {
         const config = cfg.getConfig()
         let prompt = e.msg.replace(new RegExp(`^${config.prefix}`), '').trim()
-        await this.processChat(e, prompt, 'PrefixMode')
+        // 调用请求处理器
+        await this.handleChatRequest(e, prompt, 'PrefixMode')
     }
 
+    // --- 新增：请求调度器 (负责限流和队列) ---
+    async handleChatRequest(e, prompt, mode) {
+        const config = cfg.getConfig()
+
+        // 1. 速率限制检查 (Rate Limiting)
+        if (config.enableRateLimit) {
+            const userId = e.user_id
+            const now = Date.now()
+            const windowMs = (config.rateLimitWindow || 60) * 60 * 1000 // 转换为毫秒
+            
+            let timestamps = rateLimitMap.get(userId) || []
+            // 过滤掉超出窗口期的时间戳
+            timestamps = timestamps.filter(t => now - t < windowMs)
+            
+            if (timestamps.length >= (config.rateLimitCount || 10)) {
+                this.log(`用户 ${userId} 触发速率限制`)
+                await e.reply(`🚫 您的请求太频繁了，请稍后再试。\n(限制: ${config.rateLimitWindow}分钟内${config.rateLimitCount}次)`)
+                return
+            }
+            
+            // 记录本次请求
+            timestamps.push(now)
+            rateLimitMap.set(userId, timestamps)
+        }
+
+        // 2. 顺序处理检查 (Sequential Queue)
+        if (config.enableSequential) {
+            const chatId = this.getChatId(e)
+            
+            // 如果该会话正在处理中，则加入队列
+            if (isProcessing.get(chatId)) {
+                this.log(`会话 ${chatId} 正在处理中，消息加入队列。`)
+                let queue = chatQueue.get(chatId) || []
+                queue.push({ e, prompt, mode })
+                chatQueue.set(chatId, queue)
+                await e.reply("⏳ 上一条消息正在思考中，请稍候...", true) // 可选提示
+                return
+            }
+            
+            // 标记为正在处理
+            isProcessing.set(chatId, true)
+        }
+
+        // 3. 开始执行
+        await this.executeProcess(e, prompt, mode)
+    }
+
+    // --- 执行器与队列消费 ---
+    async executeProcess(e, prompt, mode) {
+        try {
+            // 调用真正的处理逻辑
+            await this.processChat(e, prompt, mode)
+        } catch (err) {
+            this.log(`处理出错: ${err.message}`)
+        } finally {
+            // 处理完成后，检查队列
+            const config = cfg.getConfig()
+            if (config.enableSequential) {
+                const chatId = this.getChatId(e)
+                let queue = chatQueue.get(chatId) || []
+                
+                if (queue.length > 0) {
+                    this.log(`处理完成，队列中还有 ${queue.length} 条，继续执行下一条。`)
+                    const nextTask = queue.shift()
+                    chatQueue.set(chatId, queue)
+                    // 递归执行下一条
+                    this.executeProcess(nextTask.e, nextTask.prompt, nextTask.mode)
+                } else {
+                    this.log(`处理完成，队列清空。`)
+                    isProcessing.set(chatId, false)
+                }
+            }
+        }
+    }
+
+    // --- 核心逻辑 (保持不变，只是被 executeProcess 调用) ---
     async processChat(e, prompt, mode) {
         const config = cfg.getConfig()
         
-        if (!e.isGroup && !config.enablePrivateChat) {
-            this.log(`私聊开关已关闭，忽略请求。`)
-            return false
-        }
+        if (!e.isGroup && !config.enablePrivateChat) return false
 
         if (!e.isGroup) {
             if (config.whiteListMode) {
                 if (!cfg.isQQWhitelisted(e.user_id)) {
-                    this.log(`用户 ${e.user_id} 不在白名单中 (模式:白名单)，忽略。`)
+                    this.log(`用户不在白名单，忽略。`)
                     return false
                 }
             } else {
                 if (cfg.isQQBlacklisted(e.user_id)) {
-                    this.log(`用户 ${e.user_id} 在黑名单中 (模式:黑名单)，忽略。`)
+                    this.log(`用户在黑名单，忽略。`)
                     return false
                 }
             }
         }
 
         if (e.isGroup && !cfg.isGroupEnabled(e.group_id)) return false
-        
         if (!prompt) return false
 
         if (!config.apiKey) {
@@ -179,11 +252,9 @@ export class OpenAIChat extends plugin {
             if (data.choices && data.choices.length > 0) {
                 let replyContent = data.choices[0].message.content.trim()
                 
-                // --- 【核心修改】 Markdown 清洗 ---
                 if (config.stripMarkdown) {
                     replyContent = this.cleanMarkdown(replyContent)
                 }
-                // ------------------------------
 
                 this.log(`API响应成功，回复长度: ${replyContent.length}`)
                 history.push({ role: "assistant", content: replyContent })
@@ -218,8 +289,9 @@ export class OpenAIChat extends plugin {
     // --- 帮助菜单 ---
     async showHelp(e) {
         const config = cfg.getConfig()
-        const modeStatus = config.whiteListMode ? '⚪ 白名单模式' : '⚫ 黑名单模式'
-        const privateStatus = config.enablePrivateChat ? '✅ 开启' : '🚫 关闭'
+        const modeStatus = config.whiteListMode ? '⚪ 白名单' : '⚫ 黑名单'
+        const queueStatus = config.enableSequential ? '✅ 开启' : '🚫 关闭'
+        const limitStatus = config.enableRateLimit ? `${config.rateLimitCount}次/${config.rateLimitWindow}分` : '🚫 关闭'
 
         const helpMsg = [
             "🤖 Simple-OpenAI 指令大全",
@@ -231,13 +303,15 @@ export class OpenAIChat extends plugin {
             `• 帮助：${config.helpCmd}`,
             "",
             "【⚙️ 管理指令 (主人)】",
-            `• 私聊总开关：#开启/关闭私聊AI (${privateStatus})`,
+            "• 私聊总开关：#开启/关闭私聊AI",
             "• 模式切换：#开启/关闭白名单模式",
             "• 黑名单：#拉黑私聊 [QQ] / #解禁私聊 [QQ]",
             "• 白名单：#加白私聊 [QQ] / #移除白私聊 [QQ]",
             "==========================",
             `当前模型：${config.model}`,
-            `当前模式：${modeStatus}`
+            `模式：${modeStatus}`,
+            `排队：${queueStatus}`,
+            `限流：${limitStatus}`
         ]
         await e.reply(helpMsg.filter(line => line !== "").join("\n"), true)
     }

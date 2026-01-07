@@ -23,12 +23,38 @@ export function supportGuoba() {
                     label: '调试模式',
                     component: 'Switch',
                 },
-                // --- 新增：Markdown 清洗开关 ---
                 {
                     field: 'stripMarkdown',
                     label: '去除Markdown格式',
-                    bottomHelpMessage: '开启后将去除 **加粗**、# 标题 等符号，使文本显示更干净',
                     component: 'Switch',
+                },
+                // --- 新增：顺序处理与速率限制 ---
+                {
+                    field: 'enableSequential',
+                    label: '开启顺序回复(排队)',
+                    bottomHelpMessage: '开启后，同一用户的消息需等待上一条回复完成后才会处理下一条，防止报错。',
+                    component: 'Switch',
+                },
+                {
+                    field: 'enableRateLimit',
+                    label: '开启速率限制',
+                    bottomHelpMessage: '防止用户刷屏或消耗过多配额',
+                    component: 'Switch',
+                },
+                {
+                    field: 'rateLimitWindow',
+                    label: '限制时间窗口(分钟)',
+                    show: (data) => data.enableRateLimit === true,
+                    component: 'InputNumber',
+                    componentProps: { min: 1, max: 1440, placeholder: '60' }
+                },
+                {
+                    field: 'rateLimitCount',
+                    label: '允许对话次数',
+                    bottomHelpMessage: '在上述时间内允许对话多少次',
+                    show: (data) => data.enableRateLimit === true,
+                    component: 'InputNumber',
+                    componentProps: { min: 1, max: 1000, placeholder: '10' }
                 },
                 // -----------------------------
                 {
@@ -74,12 +100,10 @@ export function supportGuoba() {
                     show: (data) => data.enablePrivateChat === true,
                     component: 'Switch',
                 },
-                
                 {
                     field: 'whiteListMode',
                     label: '私聊白名单模式',
                     show: (data) => data.enablePrivateChat === true,
-                    bottomHelpMessage: '关闭=黑名单模式(默认)，开启=白名单模式(只回名单内的人)',
                     component: 'Switch',
                 },
 
