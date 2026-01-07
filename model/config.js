@@ -12,6 +12,10 @@ const defaultConfig = {
     proxyUrl: '', 
     model: 'gpt-3.5-turbo',
     
+    // --- 新增：调试模式 ---
+    debugMode: false,
+    // -------------------
+
     enableCustomModel: false,
     customModelName: '',
 
@@ -29,9 +33,7 @@ const defaultConfig = {
     enablePrivateChat: true,
     privateChatWithoutPrefix: false,
 
-    // --- 新增：私聊黑名单列表 ---
     blacklistedQQList: [] 
-    // -------------------------
 }
 
 let config = {}
@@ -93,31 +95,24 @@ export default class Config {
         this.saveConfig(config)
     }
 
-    // --- 新增：黑名单操作 ---
-    // 检查是否在黑名单中
     isQQBlacklisted(userId) {
         const list = config.blacklistedQQList || []
-        // 转为字符串比较，防止类型不一致
         return list.includes(String(userId))
     }
 
-    // 添加或移除黑名单
     modifyQQBlacklist(userId, isBlock) {
         let list = config.blacklistedQQList || []
         const target = String(userId)
         const index = list.indexOf(target)
 
         if (isBlock) {
-            // 拉黑：如果不在名单里，就加入
             if (index === -1) list.push(target)
         } else {
-            // 解禁：如果在名单里，就移除
             if (index !== -1) list.splice(index, 1)
         }
         config.blacklistedQQList = list
         this.saveConfig(config)
     }
-    // ---------------------
 
     saveConfig(data) {
         config = data

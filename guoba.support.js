@@ -18,6 +18,14 @@ export function supportGuoba() {
         },
         configInfo: {
             schemas: [
+                // --- 新增：调试模式开关 ---
+                {
+                    field: 'debugMode',
+                    label: '调试模式',
+                    bottomHelpMessage: '开启后，控制台将输出紫色的详细运行日志，用于排查问题',
+                    component: 'Switch',
+                },
+                // ------------------------
                 {
                     field: 'apiKey',
                     label: 'API Key',
@@ -49,7 +57,6 @@ export function supportGuoba() {
                     componentProps: { placeholder: 'https://api.openai.com/v1/chat/completions' }
                 },
                 
-                // --- 私聊设置 ---
                 {
                     field: 'enablePrivateChat',
                     label: '允许私聊使用AI',
@@ -63,7 +70,6 @@ export function supportGuoba() {
                     bottomHelpMessage: '开启后私聊无需加前缀即可对话',
                     component: 'Switch',
                 },
-                // --- 新增：私聊黑名单 ---
                 {
                     field: 'blacklistedQQList',
                     label: '私聊黑名单(QQ)',
@@ -71,14 +77,13 @@ export function supportGuoba() {
                     bottomHelpMessage: '输入QQ号并回车。名单内的用户私聊时不予回复。',
                     component: 'Select',
                     componentProps: {
-                        mode: 'tags', // 标签模式
+                        mode: 'tags', 
                         allowAdd: true,
                         open: false,
                         placeholder: '输入QQ号并回车',
                         options: []
                     }
                 },
-                // ---------------------
 
                 {
                     field: 'forbiddenWords',
