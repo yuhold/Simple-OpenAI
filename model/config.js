@@ -11,10 +11,7 @@ const defaultConfig = {
     baseUrl: 'https://api.openai.com/v1/chat/completions',
     proxyUrl: '', 
     model: 'gpt-3.5-turbo',
-    
-    // --- 新增：调试模式 ---
     debugMode: false,
-    // -------------------
 
     enableCustomModel: false,
     customModelName: '',
@@ -33,7 +30,11 @@ const defaultConfig = {
     enablePrivateChat: true,
     privateChatWithoutPrefix: false,
 
-    blacklistedQQList: [] 
+    // --- 新增：名单模式设置 ---
+    whiteListMode: false, // false=黑名单模式(默认), true=白名单模式
+    blacklistedQQList: [], 
+    whitelistedQQList: [] 
+    // -----------------------
 }
 
 let config = {}
@@ -61,15 +62,12 @@ export default class Config {
 
     getConfig() {
         const cfg = { ...config }
-        
         if (!cfg.useCustomUrl) {
             cfg.baseUrl = 'https://api.openai.com/v1/chat/completions'
         }
-
         if (cfg.enableCustomModel && cfg.customModelName) {
             cfg.model = cfg.customModelName
         }
-        
         return cfg
     }
 
@@ -80,7 +78,6 @@ export default class Config {
     setGroupStatus(groupId, isEnable) {
         const list = config.closedGroupList || []
         const index = list.indexOf(groupId)
-
         if (isEnable) {
             if (index !== -1) list.splice(index, 1)
         } else {
@@ -95,8 +92,21 @@ export default class Config {
         this.saveConfig(config)
     }
 
+    // --- 名单操作 ---
+    setWhiteListMode(isEnable) {
+        config.whiteListMode = isEnable
+        this.saveConfig(config)
+    }
+
+    // 黑名单检查
     isQQBlacklisted(userId) {
         const list = config.blacklistedQQList || []
+        return list.includes(String(userId))
+    }
+
+    // 白名单检查
+    isQQWhitelisted(userId) {
+        const list = config.whitelistedQQList || []
         return list.includes(String(userId))
     }
 
@@ -104,13 +114,25 @@ export default class Config {
         let list = config.blacklistedQQList || []
         const target = String(userId)
         const index = list.indexOf(target)
-
         if (isBlock) {
             if (index === -1) list.push(target)
         } else {
             if (index !== -1) list.splice(index, 1)
         }
         config.blacklistedQQList = list
+        this.saveConfig(config)
+    }
+
+    modifyQQWhitelist(userId, isAdd) {
+        let list = config.whitelistedQQList || []
+        const target = String(userId)
+        const index = list.indexOf(target)
+        if (isAdd) {
+            if (index === -1) list.push(target)
+        } else {
+            if (index !== -1) list.splice(index, 1)
+        }
+        config.whitelistedQQList = list
         this.saveConfig(config)
     }
 

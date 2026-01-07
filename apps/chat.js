@@ -17,24 +17,35 @@ export class OpenAIChat extends plugin {
             name: 'Simple-OpenAI',
             dsc: 'OpenAI对话插件',
             event: 'message',
-            // 【改回 5000】 标准优先级
             priority: 5000, 
             rule: [
                 { reg: `^${escPrefix}`, fnc: 'chatWithPrefix' },
                 { reg: '^#重置对话$', fnc: 'resetChat' },
                 { reg: `^${escHelpCmd}$`, fnc: 'showHelp' },
+                
+                // 群管理
                 { reg: '^#开启本群AI$', fnc: 'enableGroupChat' },
                 { reg: '^#开启本群ai$', fnc: 'enableGroupChat' },
                 { reg: '^#关闭本群AI$', fnc: 'disableGroupChat' },
                 { reg: '^#关闭本群ai$', fnc: 'disableGroupChat' },
+                
+                // 私聊开关
                 { reg: '^#开启私聊AI$', fnc: 'enablePrivateChatCmd' },
                 { reg: '^#开启私聊ai$', fnc: 'enablePrivateChatCmd' },
                 { reg: '^#关闭私聊AI$', fnc: 'disablePrivateChatCmd' },
                 { reg: '^#关闭私聊ai$', fnc: 'disablePrivateChatCmd' },
+                
+                // 黑名单指令
                 { reg: '^#拉黑私聊(.*)$', fnc: 'blockPrivateChat' },
                 { reg: '^#解禁私聊(.*)$', fnc: 'unblockPrivateChat' },
+
+                // 白名单及模式指令
+                { reg: '^#加白私聊(.*)$', fnc: 'addWhitePrivateChat' },
+                { reg: '^#移除白私聊(.*)$', fnc: 'delWhitePrivateChat' },
+                { reg: '^#开启白名单模式$', fnc: 'enableWhiteModeCmd' },
+                { reg: '^#关闭白名单模式$', fnc: 'disableWhiteModeCmd' },
                 
-                // 免前缀匹配 (匹配所有，但交给 chatWithoutPrefix 判断是否处理)
+                // 免前缀匹配
                 { reg: '.*', fnc: 'chatWithoutPrefix', log: false }
             ]
         })
@@ -42,33 +53,54 @@ export class OpenAIChat extends plugin {
 
     getChatId(e) { return e.isGroup ? `group:${e.group_id}` : `user:${e.user_id}` }
 
-    // --- 日志助手 ---
     log(msg) {
         const config = cfg.getConfig()
-        if (config.debugMode) {
-            logger.mark(`[Simple-OpenAI] ${msg}`)
-        }
+        if (config.debugMode) logger.mark(`[Simple-OpenAI] ${msg}`)
     }
 
-    // --- 免前缀入口 ---
-    async chatWithoutPrefix(e) {
+    // --- 帮助菜单 (更新版) ---
+    async showHelp(e) {
         const config = cfg.getConfig()
         
-        // 1. 群聊直接跳过
+        // 判断当前模式状态文字
+        const modeStatus = config.whiteListMode ? '⚪ 白名单模式 (仅回复名单内)' : '⚫ 黑名单模式 (拒绝回复名单内)'
+        const privateStatus = config.enablePrivateChat ? '✅ 开启' : '🚫 关闭'
+
+        const helpMsg = [
+            "🤖 Simple-OpenAI 指令大全",
+            "==========================",
+            "【💬 基础指令】",
+            `• 对话：${config.prefix} [内容]`,
+            config.privateChatWithoutPrefix ? "  (私聊已开启免前缀，直接发送即可)" : "",
+            "• 重置：#重置对话 (清空记忆)",
+            `• 帮助：${config.helpCmd}`,
+            "",
+            "【👥 群组管理 (群主/管理)】",
+            "• #开启本群AI",
+            "• #关闭本群AI",
+            "",
+            "【⚙️ 系统管理 (仅主人)】",
+            `• 私聊总开关：#开启/关闭私聊AI (当前: ${privateStatus})`,
+            "• 模式切换：#开启/关闭白名单模式",
+            "• 黑名单：#拉黑私聊 [QQ] / #解禁私聊 [QQ]",
+            "• 白名单：#加白私聊 [QQ] / #移除白私聊 [QQ]",
+            "==========================",
+            `当前模型：${config.model}`,
+            `当前模式：${modeStatus}`
+        ]
+        
+        // 过滤掉空行并发送
+        await e.reply(helpMsg.filter(line => line !== "").join("\n"), true)
+    }
+    // ----------------------
+
+    async chatWithoutPrefix(e) {
+        const config = cfg.getConfig()
         if (e.isGroup) return false 
-
-        // 2. 检查免前缀开关
-        if (!config.privateChatWithoutPrefix) {
-            // 开关没开，不处理，返回 false 交给其他插件
-            return false
-        }
-
-        // 3. 排除指令
+        if (!config.privateChatWithoutPrefix) return false
         if (e.msg.startsWith('#') || e.msg.startsWith('/')) return false
         
-        // 只有开启了调试模式，这里才会打印
         this.log(`免前缀模式捕获私聊消息: ${e.msg}`)
-
         const handled = await this.processChat(e, e.msg, 'NoPrefixMode')
         return handled
     }
@@ -82,19 +114,25 @@ export class OpenAIChat extends plugin {
     async processChat(e, prompt, mode) {
         const config = cfg.getConfig()
         
-        // 全局私聊开关
         if (!e.isGroup && !config.enablePrivateChat) {
             this.log(`私聊开关已关闭，忽略请求。`)
             return false
         }
 
-        // 黑名单
-        if (!e.isGroup && cfg.isQQBlacklisted(e.user_id)) {
-            this.log(`用户 ${e.user_id} 在黑名单中，忽略。`)
-            return false
+        if (!e.isGroup) {
+            if (config.whiteListMode) {
+                if (!cfg.isQQWhitelisted(e.user_id)) {
+                    this.log(`用户 ${e.user_id} 不在白名单中 (模式:白名单)，忽略。`)
+                    return false
+                }
+            } else {
+                if (cfg.isQQBlacklisted(e.user_id)) {
+                    this.log(`用户 ${e.user_id} 在黑名单中 (模式:黑名单)，忽略。`)
+                    return false
+                }
+            }
         }
 
-        // 群聊开关
         if (e.isGroup && !cfg.isGroupEnabled(e.group_id)) return false
         
         if (!prompt) return false
@@ -104,7 +142,6 @@ export class OpenAIChat extends plugin {
             return true
         }
 
-        // 违禁词
         if (config.forbiddenWords && Array.isArray(config.forbiddenWords)) {
             const hitWord = config.forbiddenWords.find(word => prompt.includes(word))
             if (hitWord) {
@@ -147,12 +184,9 @@ export class OpenAIChat extends plugin {
 
             if (!response.ok) {
                 const errText = await response.text()
-                // 错误日志始终打印 (error级别)
                 logger.error(`[Simple-OpenAI] API Error ${response.status}: ${errText}`)
-                
                 history.pop()
                 historyMap.set(chatId, history)
-                
                 await e.reply(`请求失败: ${response.status}\n请查看控制台报错。`)
                 return true
             }
@@ -161,8 +195,7 @@ export class OpenAIChat extends plugin {
             
             if (data.choices && data.choices.length > 0) {
                 const replyContent = data.choices[0].message.content.trim()
-                this.log(`API响应成功，回复内容长度: ${replyContent.length}`)
-                
+                this.log(`API响应成功，回复长度: ${replyContent.length}`)
                 history.push({ role: "assistant", content: replyContent })
                 historyMap.set(chatId, history)
 
@@ -192,24 +225,31 @@ export class OpenAIChat extends plugin {
         }
     }
 
-    // --- 帮助与管理 ---
-    async showHelp(e) {
-        const config = cfg.getConfig()
-        const helpMsg = [
-            "🤖 Simple-OpenAI 帮助菜单",
-            "-----------------------",
-            `💬 群聊指令：${config.prefix} [内容]`,
-            config.privateChatWithoutPrefix ? "💬 私聊模式：直接发送内容" : `💬 私聊指令：${config.prefix} [内容]`,
-            "🔄 重置记忆：#重置对话",
-            `🆘 帮助指令：${config.helpCmd}`,
-            "",
-            "⚙️ 管理指令 (主人)：",
-            "   #开启/关闭私聊AI",
-            "   #拉黑/解禁私聊 [QQ]",
-            "-----------------------",
-            `当前模型：${config.model}`,
-        ]
-        await e.reply(helpMsg.join("\n"), true)
+    async addWhitePrivateChat(e) {
+        if (!e.isMaster) return
+        let targetQQ = e.msg.replace(/^#加白私聊/, '').trim()
+        if (!targetQQ) { await e.reply("❌ 请输入QQ号", true); return }
+        cfg.modifyQQWhitelist(targetQQ, true)
+        await e.reply(`✅ 已将用户 ${targetQQ} 加入私聊白名单。`, true)
+    }
+
+    async delWhitePrivateChat(e) {
+        if (!e.isMaster) return
+        let targetQQ = e.msg.replace(/^#移除白私聊/, '').trim()
+        cfg.modifyQQWhitelist(targetQQ, false)
+        await e.reply(`🚫 已将用户 ${targetQQ} 移出私聊白名单。`, true)
+    }
+
+    async enableWhiteModeCmd(e) {
+        if (!e.isMaster) return
+        cfg.setWhiteListMode(true)
+        await e.reply("⚪ 已切换为【白名单模式】，只回复名单内用户。", true)
+    }
+
+    async disableWhiteModeCmd(e) {
+        if (!e.isMaster) return
+        cfg.setWhiteListMode(false)
+        await e.reply("⚫ 已切换为【黑名单模式】，回复除黑名单外的所有人。", true)
     }
 
     async blockPrivateChat(e) {
