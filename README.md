@@ -39,7 +39,7 @@ Simple-OpenAI 是一个专为 Yunzai-Bot 设计的对话插件。它旨在提供
 
 ```bash
 cd plugins
-git clone [https://github.com/yuhold/Simple-OpenAI.git](https://github.com/yuhold/Simple-OpenAI.git)
+git clone https://github.com/yuhold/Simple-OpenAI.git
 
 ```
 
